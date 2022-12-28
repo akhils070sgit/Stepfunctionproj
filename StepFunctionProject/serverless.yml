@@ -13,6 +13,15 @@ provider:
     - Effect: Allow
       Action: dynamodb:*
       Resource: arn:aws:dynamodb:us-east-2:669166597158:table/usertable
+    - Effect: Allow
+      Action: sns:*
+      Resource: arn:aws:sns:us-east-2:669166597158:custorderSNS
+    - Effect: Allow
+      Action: sqs:*
+      Resource: arn:aws:sqs:us-east-2:669166597158:custorderSQS
+    - Effect: Allow
+      Action: states:*
+      Resource: arn:aws:states:us-east-2:669166597158:stateMachine:StorecheckoutStepFn
 
 
 functions:
@@ -26,6 +35,14 @@ functions:
     handler: handler.billCustomer
   restoreRedeemPoints:
     handler: handler.restoreRedeemPoints
+  restoreQuantity:
+    handler: handler.restoreQuantity
+  sqsWorker:
+    handler: handler.sqsWorker
+    events:
+      - sqs:
+          arn: arn:aws:sqs:us-east-2:669166597158:custorderSQS
+          batchSize: 1
   
 
 plugins:
@@ -83,8 +100,32 @@ stepFunctions:
             - ErrorEquals: [States.All]
               ResultPath: "$.customerbillingissue"
               Next: billingError
-          End: true
-          #Next: prepareOrder           
+          Next: prepareOrder    
+        prepareOrder: #Add to the queue, lambda worker, will allocate the quirier by calling a 3rd party api and reduce the amount from the item
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage.waitForTaskToken
+            Parameters:
+              QueueUrl: https://sqs.us-east-2.amazonaws.com/669166597158/custorderSQS
+              MessageBody:
+                Input.$: "$"
+                Token.$: "$$.Task.Token" #From the context
+            ResultPath: "$.courierStatus"
+            Catch:
+              - ErrorEquals: [NoCourierAvailable]
+                ResultPath: "$.courierError"
+                Next: RefundCustomer
+            Next: DispatchOrder
+        DispatchOrder:
+            Type: Task
+            Resource: arn:aws:states:::sns:publish
+            Parameters:
+              TopicArn: arn:aws:sns:us-east-2:669166597158:custorderSNS
+              Message.$: "$"
+            Next: Dispatched
+        Dispatched:
+            Type: Pass
+            Result: "Your order will be dispatched in 24 hours"
+            End: true       
         bookNotFoundError:
           Type: Pass
           Result: "Entered book is not available, please make sure searching correct book!"
@@ -107,5 +148,16 @@ stepFunctions:
           Resource:
            Fn::GetAtt: [restoreRedeemPoints, Arn]
           End: true
+        RestoreQuantity:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [restoreQuantity, Arn]
+            ResultPath: "$.quantityRestoreStatus"
+            Next: RestoreRedeemPoints
+        RefundCustomer:
+            Type: Pass
+            Result: "Customer is refunded"
+            ResultPath: "$.refundStatus"
+            Next: RestoreQuantity
 
           
