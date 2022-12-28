@@ -1,4 +1,3 @@
-'use strict';
 const AWS = require("aws-sdk");
 const StepFunction = new AWS.StepFunctions();
 const DynamoDB= require("aws-sdk/clients/dynamodb");
@@ -40,52 +39,52 @@ module.exports.checkInventory = async ({ BookId, Quantity }) => {
 }
 
 module.exports.calculateTotal = async ({book,Quantity}) => {
-let total = book.price*Quantity;
+let total = book.Price*Quantity;
 return {total}
 };
 
-const deductpoint= async(userId) => {
+const deductpoint= async(UserId) => {
   let params = {
-    TableName:'userTable',
-    Key: {'userId':userId},
-    UpdateExpression : 'SET RedeemPoints = :zero',
-    ExpressionAttributeValues: {
-      ':zero' : 0
-    }
-
+      TableName: 'usertable',
+      Key: {'UserId': UserId},
+      UpdateExpression: 'SET RedeemPoints = :zero',
+      ExpressionAttributeValues: {
+      ':zero': 0
+      }
   }
-  await DocumentClient.update(params).promise()  
-
+  await DocumentClient.update(params).promise(); 
 }
 
-module.exports.redeempoints = async ({userId,total}) => {
-let ordertotal =total.total;
-try{ 
-  let params={
-    TableName:'userTable',
-    Key:{
-      'userId':userId
-    }
-  }
+module.exports.redeempoints = async ({UserId,total}) => {
+  console.log("UserId: ", UserId);
+  let ordertotal =total.total;
+  console.log("orderTotal:", ordertotal);
+  try{ 
+     let params= {
+         TableName: 'usertable',
+         Key: {
+            'UserId': UserId
+         }
+     };
 
-  let result = await DocumentClient.get(params).promise();
-  let user=result.Item;
+     let result = await DocumentClient.get(params).promise();
+     let user=result.Item;
 
-  const point=user.RedeemPoints;
+     const point=user.RedeemPoints;
   
-  if(ordertotal>point/100)
-  {
-    await deductpoint(userId);
-    ordertotal = ordertotal- point;
-    return {total:ordertotal, point}
-  } else {
-    return "Not sufficient Redeem Points"
-  }
+     if(ordertotal > (point/10))
+     {
+       await deductpoint(UserId);
+       ordertotal = ordertotal- (point/10);
+       return {total: ordertotal, point}
+     } else {
+       return "Not sufficient Redeem Points"
+     }
 
-  }
-  catch(e){
-  throw e;
-  }
+     }
+     catch(e){
+       throw e;
+     }
 };
 
 module.exports.billCustomer = async (params) => {
@@ -93,12 +92,12 @@ return "Succesfully billed"
 };
 
 
-module.exports.restoreRedeemPoints = async ({ userId, total }) => {
+module.exports.restoreRedeemPoints = async ({ UserId, total }) => {
   try {
       if (total.point) {
           let params = {
-              TableName: 'userTable',
-              Key: { userId: userId },
+              TableName: 'usertable',
+              Key: { UserId: UserId },
               UpdateExpression: 'set RedeemPoints = :point',
               ExpressionAttributeValues: {
                   ':point': total.point
@@ -140,25 +139,25 @@ module.exports.sqsWorker = async (event) => {
   }
 }
 
-module.exports.restoreQuantity = async ({ bookId, quantity }) => {
+module.exports.restoreQuantity = async ({ BookId, Quantity }) => {
   let params = {
       TableName: 'bookTable',
-      Key: { BookId: bookId },
+      Key: { BookId: BookId },
       UpdateExpression: 'set Quantity = Quantity + :orderQuantity',
       ExpressionAttributeValues: {
-          ':orderQuantity': quantity
+          ':orderQuantity': Quantity
       }
   };
   await DocumentClient.update(params).promise();
   return "Quantity restored"
 }
 
-const updateBookQuantity = async (bookId, orderQuantity) => {
-  console.log("bookId: ", bookId);
+const updateBookQuantity = async (BookId, orderQuantity) => {
+  console.log("bookId: ", BookId);
   console.log("orderQuantity: ", orderQuantity);
   let params = {
       TableName: 'bookTable',
-      Key: { 'BookId': bookId },
+      Key: { 'BookId': BookId },
       UpdateExpression: 'SET Quantity = Quantity - :orderQuantity',
       ExpressionAttributeValues: {
           ':orderQuantity': orderQuantity
