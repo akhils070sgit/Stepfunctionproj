@@ -1,0 +1,18 @@
+{
+  "devDependencies": {
+    "serverless-step-functions": "^3.11.1"
+  },
+  "dependencies": {
+    "serverless": "^3.26.0"
+  },
+  "name": "stepfunctionproj",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
